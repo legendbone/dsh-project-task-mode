@@ -1,6 +1,8 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { ISessions, SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
+import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -13,7 +15,13 @@ import { ProjectTaskBoard } from './board.tsx'
 import { PROJECT_TASK_REMOTE } from './remote.ts'
 import { adoptProjectTaskStyles } from './styles.ts'
 
-export const inject = ['slots', 'remote', 'uiWorkspace']
+declare module '@deepseek-ai/dsh-api-session-controller/client' {
+  interface SessionReferenceSourceMap {
+    projectTaskDraft: unknown
+  }
+}
+
+export const inject = ['slots', 'remote', 'uiWorkspace', 'sessions', 'conversation']
 
 async function unwrap<T>(result: Promise<RemoteResult<T>>): Promise<T> {
   const resolved = await result
@@ -41,6 +49,28 @@ export function apply(ctx: ClientContext): void {
     return remote
   }
 
+  function openTaskSession(sessionId: string, prompt: string): void {
+    // The host `SessionStore` augmentation shadows the Client `ISessions` face in
+    // this shared type program; in the browser `sessions` is always the Client one.
+    const sessions = ctx.sessions as unknown as ISessions
+    let reference: SessionReference | undefined
+    try {
+      reference = sessions.retain(sessionId as SessionId, { source: 'projectTaskDraft' })
+      ctx.conversation.input.requestDraftInitialization(reference.binding, {
+        prompt,
+        whenDraftExists: 'replace',
+      })
+    } catch (error) {
+      // Prefilling is a convenience; opening the session must still work.
+      console.warn('项目任务预输入失败，改为打开空输入框：', error)
+    }
+    try {
+      ctx.uiWorkspace.openSession(sessionId as SessionId)
+    } finally {
+      reference?.release()
+    }
+  }
+
   const actions: ProjectTaskActions = {
     list: query => unwrap(namespace().list(query)),
     get: taskId => unwrap(namespace().get(taskId)),
@@ -48,6 +78,7 @@ export function apply(ctx: ClientContext): void {
     update: input => unwrap(namespace().update(input)),
     continueTask: input => unwrap(namespace().continue(input)),
     openSession: sessionId => ctx.uiWorkspace.openSession(sessionId as SessionId),
+    openTaskSession,
   }
 
   ctx.slots.inject('main', () => ctx.slots.register({

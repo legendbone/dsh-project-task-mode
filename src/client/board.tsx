@@ -228,6 +228,10 @@ export function ProjectTaskBoard({ actions, useWorkspaces, useSessions }: Projec
   async function continueTask(): Promise<void> {
     const current = detailsRef.current
     if (!current || busyRef.current) return
+    const fresh = current.checkpoints.length === 0 && current.sessions.length === 0
+    const finished = current.task.status === 'done' || current.task.status === 'cancelled'
+    const action = finished ? '重新开启任务' : fresh ? '开始任务' : '继续任务'
+    const prompt = `${action}：${current.task.title.trim()}`
     busyRef.current = true
     setBusy(true)
     setError('')
@@ -239,7 +243,7 @@ export function ProjectTaskBoard({ actions, useWorkspaces, useSessions }: Projec
       showNotice('会话已创建，正在打开…')
       closeDetails()
       refresh()
-      actions.openSession(result.sessionId)
+      actions.openTaskSession(result.sessionId, prompt)
     } catch (cause) {
       setError(formatTaskError(cause))
     } finally {

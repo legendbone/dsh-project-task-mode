@@ -15,4 +15,5 @@ export interface ProjectTaskActions {
   update(input: UpdateTaskRequest): Promise<TaskDetails>
   continueTask(input: ContinueTaskInput): Promise<ContinueTaskResult>
   openSession(sessionId: string): void
+  openTaskSession(sessionId: string, prompt: string): void
 }
