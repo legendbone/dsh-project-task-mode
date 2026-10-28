@@ -1,0 +1,130 @@
+{
+  "name": "dsh-project-task-mode",
+  "version": "0.1.9",
+  "description": "Workspace-scoped project tasks, handoffs, and a task board for DeepSeek Harness",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./agent": {
+      "types": "./lib/types/agent/index.d.ts",
+      "default": "./lib/agent.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./remote": {
+      "types": "./lib/types/client/remote.d.ts",
+      "default": "./lib/remote-client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "docs/project-task-mode-design.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src scripts --max-warnings=0",
+    "check": "npm run typecheck && npm run lint && npm run build",
+    "prepublishOnly": "npm run check"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": "0.2.1-rc.3"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-agent-preset": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-api-remotes": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-api-workspace-controller": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-layout": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-session": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-sidebar": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-workspace": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-typert-registry": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-workspace": "0.2.1-rc.3",
+    "react": "^18.2.0"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-agent-preset": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-api-remotes": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-api-workspace-controller": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-layout": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-session": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-sidebar": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-client-ui-workspace": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-typert-registry": "0.2.1-rc.3",
+    "@deepseek-ai/dsh-workspace": "0.2.1-rc.3",
+    "@deepseek-ai/schemastery": "^3.18.1",
+    "@eslint/js": "^9.30.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "esbuild": "^0.25.0",
+    "eslint": "^9.30.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.35.0"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "project-management",
+    "tasks"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/legendbone/dsh-project-task-mode.git"
+  }
+}
