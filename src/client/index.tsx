@@ -91,7 +91,7 @@ export function apply(ctx: ClientContext): void {
     name: 'sidebar.panellist',
     id: 'project-tasks' as MainPanelId,
     order: 15,
-    label: () => '任务',
+    label: () => '项目任务',
   }, () => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <rect x="3.5" y="4.5" width="17" height="15" rx="3" stroke="currentColor" strokeWidth="1.6" />
     <path d="M9 4.5v15M15 4.5v9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />

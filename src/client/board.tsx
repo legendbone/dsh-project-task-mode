@@ -29,7 +29,7 @@ import {
 } from './icons.tsx'
 import { emptyColumnCopy, PRIMARY_COLUMNS, STATUS_HINTS, STATUS_LABELS } from './labels.ts'
 import { NewTaskDialog } from './new-task-dialog.tsx'
-import { sessionLabel, type SessionInfo, type SessionInfoMap } from './session-info.ts'
+import { currentWorkspaceId, sessionLabel, type SessionInfo, type SessionInfoMap } from './session-info.ts'
 import { TaskDetail } from './task-detail.tsx'
 
 const DEFAULT_REFRESH_MS = 4000
@@ -86,6 +86,19 @@ export function ProjectTaskBoard({ actions, useWorkspaces, useSessions }: Projec
       setOpenTaskId(undefined)
     }
   }, [workspaceId, workspaces])
+
+  const selectedWorkspaceId = currentWorkspaceId(sessionSnapshot, workspaces)
+  useEffect(() => {
+    if (!selectedWorkspaceId) return
+    setWorkspaceId(selectedWorkspaceId)
+    openSeqRef.current += 1
+    setDetails(undefined)
+    setOpenTaskId(undefined)
+    setDetailLoading(false)
+    setCreateStatus(undefined)
+    setError('')
+    detailDirtyRef.current = false
+  }, [selectedWorkspaceId])
 
   useEffect(() => {
     const timer = window.setTimeout(() => setKeyword(searchDraft.trim()), 260)

@@ -2,7 +2,7 @@
 
 为 DeepSeek Harness（DSH）实现「项目任务模式」：以工作区为项目边界，将对话拆解为可持续推进的任务，在同工作区的会话间共享任务状态和交接上下文，并提供工作区任务看板。
 
-当前版本：`0.1.10`。目标宿主：DeepSeek Harness `0.2.1-rc.3`。
+当前版本：`0.1.11`。目标宿主：DeepSeek Harness `0.2.1-rc.3`。
 
 ## 已实现
 
@@ -28,12 +28,12 @@
 
 ```bash
 npm pack
-npx @deepseek-ai/dsh@0.2.1-rc.3 plugin --profile web add ./dsh-project-task-mode-0.1.10.tgz
+npx @deepseek-ai/dsh@0.2.1-rc.3 plugin --profile web add ./dsh-project-task-mode-0.1.11.tgz
 ```
 
 ### DeepSeek Harness Desktop
 
-桌面版的 `desktop` profile 由 Electron 独占管理，`dsh plugin --profile desktop` 会被启动器拒绝。在应用侧栏的「插件」页安装本地的 `.tgz` 即可：插件管理器会复用应用内置的 pnpm，在运行中的 Host 上完成安装；首次安装会热应用，不需要重启应用。升级已经加载的插件时，插件管理器会提示需要重启，重启应用后新版本生效。安装完成后侧栏出现「任务」，新建会话时可以选择「项目任务」。
+桌面版的 `desktop` profile 由 Electron 独占管理，`dsh plugin --profile desktop` 会被启动器拒绝。在应用侧栏的「插件」页安装本地的 `.tgz` 即可：插件管理器会复用应用内置的 pnpm，在运行中的 Host 上完成安装；首次安装会热应用，不需要重启应用。升级已经加载的插件时，插件管理器会提示需要重启，重启应用后新版本生效。安装完成后侧栏出现「项目任务」，新建会话时可以选择「项目任务」。
 
 如果侧栏或预设没有立即出现，刷新一次窗口（macOS `Cmd+R`）。
 
@@ -41,7 +41,7 @@ npx @deepseek-ai/dsh@0.2.1-rc.3 plugin --profile web add ./dsh-project-task-mode
 
 Web profile 安装后需要重启 DSH Web；Desktop 安装后刷新窗口即可。
 
-1. 在侧栏点击「任务」打开工作区看板。
+1. 在侧栏点击「项目任务」打开工作区看板；看板会跟随当前选中会话切换所属项目，也可手动切换项目。
 2. 新建会话时在 Agent Preset 中选择「项目任务」。
 3. 提出实质需求后，Agent 会创建主任务并记录开始 Checkpoint。
 4. Agent 完成实现和自测后，任务进入「待验收」；在详情中确认后改为「已完成」。
@@ -59,6 +59,7 @@ Web profile 安装后需要重启 DSH Web；Desktop 安装后刷新窗口即可�
 
 ```bash
 npm install
+npm test
 npm run typecheck
 npm run lint
 npm run build
