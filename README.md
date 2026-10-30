@@ -2,7 +2,7 @@
 
 为 DeepSeek Harness（DSH）实现「项目任务模式」：以工作区为项目边界，将对话拆解为可持续推进的任务，在同工作区的会话间共享任务状态和交接上下文，并提供工作区任务看板。
 
-当前版本：`0.1.11`。目标宿主：DeepSeek Harness `0.2.1-rc.3`。
+当前版本：`0.1.12`。目标宿主：DeepSeek Harness `0.2.1-rc.5`。
 
 ## 已实现
 
@@ -22,13 +22,13 @@
 
 ## 安装
 
-需要 Node.js `^22.19.0 || >=24`、DSH `0.2.1-rc.3` 和 `pnpm`。
+需要 Node.js `^22.19.0 || >=24`、DSH `0.2.1-rc.5` 和 `pnpm`。
 
 ### Web / CLI profile
 
 ```bash
 npm pack
-npx @deepseek-ai/dsh@0.2.1-rc.3 plugin --profile web add ./dsh-project-task-mode-0.1.11.tgz
+npx @deepseek-ai/dsh@0.2.1-rc.5 plugin --profile web add ./dsh-project-task-mode-0.1.12.tgz
 ```
 
 ### DeepSeek Harness Desktop
@@ -91,7 +91,7 @@ backlog → todo → in_progress → in_review → done
 
 ## 验证情况
 
-已在隔离的真实 DSH `0.2.1-rc.3` Web 实例中验证：
+`0.1.12` 已在 DSH `0.2.1-rc.5` 下通过自动化检查、Host/Agent 模块导入、隔离 profile 安装和配置组合验证。以下端到端功能此前已在隔离的真实 DSH `0.2.1-rc.3` Web 实例中验证：
 
 - 看板创建、状态流转和用户验收。
 - Agent 一次调用创建主任务、子任务和开始 Checkpoint，再干净地进入 `in_review`。

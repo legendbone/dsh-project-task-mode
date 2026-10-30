@@ -2,7 +2,7 @@
 
 - 状态：已确认
 - 日期：2026-10-28
-- 目标版本：DeepSeek Harness 0.2.1-rc.3
+- 目标版本：DeepSeek Harness 0.2.1-rc.5
 
 ## 1. 方案结论
 
