@@ -6,6 +6,7 @@ import type {
   ContinueTaskInput,
   ContinueTaskResult,
   CreateManualTaskInput,
+  RecallAuditRecord,
   TaskContextPackage,
   TaskDetails,
   TaskListResult,
@@ -24,6 +25,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     list: (query: TaskQuery) => Promise<RemoteResult<TaskListResult>>
     get: (taskId: string) => Promise<RemoteResult<TaskDetails>>
     context: (workspaceId: string, boundTaskId?: string) => Promise<RemoteResult<TaskContextPackage>>
+    recallAudit: (taskId: string, limit?: number) => Promise<RemoteResult<RecallAuditRecord[]>>
     create: (input: CreateManualTaskInput) => Promise<RemoteResult<TaskDetails>>
     update: (input: UpdateTaskRequest) => Promise<RemoteResult<TaskDetails>>
     continue: (input: ContinueTaskInput) => Promise<RemoteResult<ContinueTaskResult>>
@@ -33,6 +35,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'projectTasks/list': TypertRemoteNamespace$70726f6a6563745461736b73['list']
     'projectTasks/get': TypertRemoteNamespace$70726f6a6563745461736b73['get']
     'projectTasks/context': TypertRemoteNamespace$70726f6a6563745461736b73['context']
+    'projectTasks/recallAudit': TypertRemoteNamespace$70726f6a6563745461736b73['recallAudit']
     'projectTasks/create': TypertRemoteNamespace$70726f6a6563745461736b73['create']
     'projectTasks/update': TypertRemoteNamespace$70726f6a6563745461736b73['update']
     'projectTasks/continue': TypertRemoteNamespace$70726f6a6563745461736b73['continue']

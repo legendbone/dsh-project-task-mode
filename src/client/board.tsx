@@ -146,7 +146,11 @@ export function ProjectTaskBoard({ actions, useWorkspaces, useSessions }: Projec
         if (open && !detailDirtyRef.current && !busyRef.current) {
           try {
             const fresh = await actions.get(open.task.id)
-            if (active && fresh.task.revision !== open.task.revision) setDetails(fresh)
+            const derivedChanged = fresh.artifacts?.length !== open.artifacts?.length ||
+              fresh.artifacts?.[0]?.lastObservedAt !== open.artifacts?.[0]?.lastObservedAt ||
+              fresh.recallAudit?.length !== open.recallAudit?.length ||
+              fresh.recallAudit?.[0]?.createdAt !== open.recallAudit?.[0]?.createdAt
+            if (active && (fresh.task.revision !== open.task.revision || derivedChanged)) setDetails(fresh)
           } catch {
             // Keep the current detail when a background refresh cannot read it.
           }

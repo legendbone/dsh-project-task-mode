@@ -39,6 +39,8 @@ export interface ProjectTask {
   createdAt: number
   updatedAt: number
   completedAt?: number
+  archivedAt?: number
+  deletedAt?: number
 }
 
 export interface TaskSessionLink {
@@ -62,6 +64,8 @@ export interface TaskCheckpoint {
   verification: string[]
   openQuestions: string[]
   nextSteps: string[]
+  lessons?: string[]
+  procedures?: string[]
   eventRange?: {
     fromSeq: number
     toSeq: number
@@ -143,6 +147,8 @@ export interface CheckpointInput {
   verification?: string[]
   openQuestions?: string[]
   nextSteps?: string[]
+  lessons?: string[]
+  procedures?: string[]
   eventRange?: {
     fromSeq: number
     toSeq: number
@@ -182,6 +188,9 @@ export interface TaskDetails {
   checkpoints: TaskCheckpoint[]
   sessions: TaskSessionLink[]
   activities: TaskActivity[]
+  artifacts?: TaskArtifactRecord[]
+  recallAudit?: RecallAuditRecord[]
+  artifactObservationTruncated?: boolean
 }
 
 export interface TaskContextItem {
@@ -197,6 +206,75 @@ export interface TaskContextPackage {
   blocked: TaskContextItem[]
   recentHandoffs: TaskContextItem[]
   boundTask?: TaskDetails
+}
+
+export type ArtifactChangeKind = 'created' | 'modified' | 'deleted' | 'renamed'
+
+export interface ObservedArtifact {
+  observationId: string
+  path: string
+  changeKind: ArtifactChangeKind
+  toolName: string
+  observedAt: number
+}
+
+export interface TaskArtifactRecord extends ObservedArtifact {
+  taskId: string
+  workspaceId: string
+  source: 'tool-observer'
+  firstObservedAt: number
+  lastObservedAt: number
+}
+
+export interface TaskInsightRecord {
+  id: string
+  workspaceId: string
+  taskId?: string
+  kind: 'decision' | 'lesson' | 'procedure' | 'question'
+  scope: 'task' | 'workspace' | 'global'
+  content: string
+  contentHash: string
+  status: 'active' | 'resolved' | 'stale' | 'superseded'
+  supersededByInsightId?: string
+  sourceCheckpointId?: string
+  createdAt: number
+  updatedAt: number
+  lastSeenAt: number
+  lastUsedAt?: number
+}
+
+export type RecallGateMode = 'shadow' | 'actual'
+
+export interface RecallRejection {
+  taskId: string
+  reason: 'below-score' | 'insufficient-signals' | 'below-support-ratio' | 'no-context-slot' | 'safety-cap' | 'budget-truncated'
+  score: number
+}
+
+export interface RecallAuditSummary {
+  workspaceId: string
+  boundTaskId?: string
+  mode: RecallGateMode
+  gateVersion: string
+  candidateCount: number
+  keptCount: number
+  reasonCounts: Record<string, number>
+  legacyChars: number
+  gatedChars: number
+  nonBoundBudget: number
+  rejectedSample: RecallRejection[]
+}
+
+export interface RecallAuditRecord extends RecallAuditSummary {
+  id: string
+  sessionId?: string
+  createdAt: number
+}
+
+export interface RecallEvaluation {
+  legacyPackage: TaskContextPackage
+  gatedPackage: TaskContextPackage
+  audit: RecallAuditSummary
 }
 
 export interface ContinueTaskInput {

@@ -10,6 +10,7 @@ import type {
   UpdateTaskRequest,
 } from '../shared/types.ts'
 import type { ProjectTaskController } from '../host/remote.ts'
+import type { ArtifactCollector } from './artifacts.ts'
 
 const TEXT_OUTPUT = {
   schema: { type: 'string' as const },
@@ -40,7 +41,11 @@ function json(value: unknown): string {
   return JSON.stringify(value)
 }
 
-export function registerProjectTaskTools(ctx: Context, controller: ProjectTaskController): void {
+export function registerProjectTaskTools(
+  ctx: Context,
+  controller: ProjectTaskController,
+  collector?: ArtifactCollector,
+): void {
   const register = (definition: ToolDefinition) => ctx.tools.register(definition)
 
   register({
@@ -51,7 +56,7 @@ export function registerProjectTaskTools(ctx: Context, controller: ProjectTaskCo
       properties: {
         taskId: { type: 'string', description: 'Existing task to claim; omit to create a new main task.' },
         expectedRevision: { type: 'number', description: 'Revision read when claiming an existing task.' },
-        title: { type: 'string' },
+        title: { type: 'string', description: 'New task title. Optional when creating a new main task; if omitted it is derived from summary.' },
         description: { type: 'string' },
         acceptanceCriteria: stringArray,
         priority: { type: 'string', enum: ['low', 'normal', 'high'] },
@@ -117,6 +122,8 @@ export function registerProjectTaskTools(ctx: Context, controller: ProjectTaskCo
         summary: { type: 'string' },
         currentState: { type: 'string' },
         decisions: stringArray,
+        lessons: stringArray,
+        procedures: stringArray,
         modifiedFiles: stringArray,
         verification: stringArray,
         openQuestions: stringArray,
@@ -137,7 +144,11 @@ export function registerProjectTaskTools(ctx: Context, controller: ProjectTaskCo
     output: TEXT_OUTPUT,
     async execute(args, exec) {
       const input = args as Omit<CheckpointInput, 'sessionId' | 'actor'>
-      return json(await controller.checkpointForSession(sessionOf(exec), input))
+      const session = sessionOf(exec)
+      const snapshot = collector?.peek(session.id)
+      const details = await controller.checkpointForSession(session, input, snapshot?.observations ?? [])
+      if (snapshot) collector?.ack(session.id, snapshot.observations.map(item => item.observationId))
+      return json(snapshot?.truncated ? { ...details, artifactObservationTruncated: true } : details)
     },
   })
 

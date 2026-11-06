@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { taskError } from '../shared/errors.ts'
+import { DEFAULT_HOST_CONFIG, type HostConfig } from '../shared/config.ts'
+import { evaluateRecallContext } from './recall-gate.ts'
 import type {
   CheckpointInput,
+  ObservedArtifact,
   ProjectTask,
+  RecallAuditRecord,
+  RecallEvaluation,
   StartTaskInput,
   SubtaskInput,
   TaskActivity,
@@ -22,7 +27,7 @@ import { linkKey, type ProjectTaskStore } from './store.ts'
 
 const TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
   backlog: ['todo', 'cancelled'],
-  todo: ['backlog', 'in_progress', 'cancelled'],
+  todo: ['backlog', 'in_progress', 'in_review', 'cancelled'],
   in_progress: ['paused', 'blocked', 'in_review', 'cancelled'],
   paused: ['todo', 'in_progress', 'blocked', 'cancelled'],
   blocked: ['todo', 'in_progress', 'cancelled'],
@@ -35,10 +40,48 @@ function newestFirst<T extends { createdAt?: number; updatedAt?: number; linkedA
   return items.sort((a, b) => (b.updatedAt ?? b.createdAt ?? b.linkedAt ?? 0) - (a.updatedAt ?? a.createdAt ?? a.linkedAt ?? 0))
 }
 
+/**
+ * Derive a task title from the start summary when the caller omitted `title`.
+ * Uses the first non-empty line, strips common markdown emphasis/list markers,
+ * collapses whitespace and caps the length so a new task can always be created.
+ */
+function deriveTaskTitle(summary: string): string {
+  const firstLine = summary.split(/\r?\n/).map((line) => line.trim()).find((line) => line.length > 0) ?? ''
+  const cleaned = firstLine
+    .replace(/^#{1,6}\s+/, '')
+    .replace(/^[>*\-+]\s+/, '')
+    .replace(/^\d+[.)]\s+/, '')
+    .replace(/[*_`~]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const candidate = cleaned || summary.replace(/\s+/g, ' ').trim() || '未命名任务'
+  return candidate.length > 120 ? `${candidate.slice(0, 120).trimEnd()}…` : candidate
+}
+
+/**
+ * Whether a project_task_start call replaced the session's previously bound task with
+ * a different, now-active main task — i.e. a topic switch inside one session. The
+ * controller uses this to retitle the session to the new task so the session title and
+ * the bound task never disagree.
+ */
+export function shouldRetitleSessionAfterStart(
+  previousTaskId: string | undefined,
+  details: TaskDetails,
+  sessionId: string,
+): boolean {
+  const { task } = details
+  return previousTaskId !== undefined &&
+    task.id !== previousTaskId &&
+    !task.parentId &&
+    task.status === 'in_progress' &&
+    task.activeSessionId === sessionId
+}
+
 export class ProjectTaskService {
   constructor(
     private readonly store: ProjectTaskStore,
     private readonly now: () => number = Date.now,
+    private readonly config: HostConfig = DEFAULT_HOST_CONFIG,
   ) {}
 
   list(query: TaskQuery): TaskListResult {
@@ -65,7 +108,15 @@ export class ProjectTaskService {
       checkpoints: newestFirst(this.store.allCheckpoints().filter(item => item.taskId === taskId)),
       sessions: newestFirst(this.store.allLinks().filter(item => item.taskId === taskId)),
       activities: newestFirst(this.store.allActivities().filter(item => item.taskId === taskId)),
+      artifacts: this.store.listArtifacts(taskId)
+        .sort((a, b) => b.lastObservedAt - a.lastObservedAt || a.path.localeCompare(b.path)),
+      recallAudit: this.store.listRecallAudit(task.workspaceId, taskId, 20),
     }
+  }
+
+  listRecallAudit(taskId: string, limit = 50): RecallAuditRecord[] {
+    const task = this.requireTask(taskId)
+    return this.store.listRecallAudit(task.workspaceId, taskId, limit)
   }
 
   async createManual(input: {
@@ -100,16 +151,30 @@ export class ProjectTaskService {
   async start(input: StartTaskInput): Promise<TaskDetails> {
     const actor: TaskActor = { type: 'agent', sessionId: input.sessionId }
     if (input.taskId) return await this.claim(input, actor)
-    const active = this.activeTaskForSession(input.sessionId)
-    if (active) {
-      return await this.claim({ ...input, taskId: active.id, expectedRevision: active.revision }, actor)
+
+    // 待验收任务或未绑定执行会话的任务在同一会话重新进入工作时，接管原任务而不是新建重复任务。
+    const bound = this.boundTaskForSession(input.sessionId)
+    if (bound && this.isTakeoverCandidate(bound, input.sessionId)) {
+      return await this.claim({ ...input, taskId: bound.id, expectedRevision: bound.revision }, actor)
     }
 
-    if (!input.title) throw taskError('project-task/invalid-request', 'A new main task requires a title')
+    const title = input.title?.trim() || deriveTaskTitle(input.summary)
+    const active = this.activeTaskForSession(input.sessionId)
+    if (active) {
+      if (active.title === title) {
+        // 同一会话、同一标题再次 start：视为对当前任务的幂等重入，不新建重复任务。
+        return await this.claim({ ...input, taskId: active.id, expectedRevision: active.revision }, actor)
+      }
+      // 主题切换：调用方在本会话仍持有一个进行中的主任务时新建了另一个主任务。
+      // 先把旧任务交接（暂停）出去，保证一个会话始终只有一个活动主任务；否则旧任务会继续以
+      // activeSessionId 占用本会话，把新主任务静默吞并（见会话-任务绑定错乱问题）。
+      await this.supersedeActiveTask(active, input.sessionId, title, actor)
+    }
+
     const task = this.newTask({
       workspaceId: input.workspaceId,
       actor,
-      title: input.title,
+      title,
       description: input.description ?? '',
       acceptanceCriteria: input.acceptanceCriteria ?? [],
       priority: input.priority ?? 'normal',
@@ -203,34 +268,55 @@ export class ProjectTaskService {
     return this.get(taskId)
   }
 
-  async checkpoint(input: CheckpointInput): Promise<TaskDetails> {
+  async checkpoint(input: CheckpointInput, observedArtifacts: readonly ObservedArtifact[] = []): Promise<TaskDetails> {
     const task = this.requireTask(input.taskId)
-    await this.writeCheckpoint(task, input, true)
+    const canRefreshRevision = input.expectedRevision !== undefined &&
+      task.revision !== input.expectedRevision &&
+      task.status === 'in_progress' &&
+      task.activeSessionId === input.sessionId
+    const effectiveInput = canRefreshRevision
+      ? { ...input, expectedRevision: task.revision }
+      : input
+    await this.writeCheckpoint(task, effectiveInput, true, observedArtifacts)
     return this.get(input.taskId)
   }
 
-  context(workspaceId: string, boundTaskId?: string): TaskContextPackage {
-    const tasks = this.store.allTasks().filter(task => task.workspaceId === workspaceId && !task.parentId)
-    const contextItem = (task: ProjectTask) => {
-      const latest = newestFirst(this.store.allCheckpoints().filter(item => item.taskId === task.id))[0]
-      return {
-        taskId: task.id,
-        title: task.title,
-        status: task.status,
-        summary: latest?.summary ?? task.description,
-      }
-    }
-    const handoffTaskIds = new Set(newestFirst(this.store.allCheckpoints()
-      .filter(item => item.kind === 'handoff' || item.kind === 'finish' || item.kind === 'interrupted'))
-      .map(item => item.taskId))
-    const handoffs = newestFirst(tasks.filter(task => handoffTaskIds.has(task.id))).slice(0, 2).map(contextItem)
-    return {
+  evaluateContext(workspaceId: string, boundTaskId?: string): RecallEvaluation {
+    const evaluation = evaluateRecallContext({
       workspaceId,
-      inProgress: newestFirst(tasks.filter(task => task.status === 'in_progress')).slice(0, 3).map(contextItem),
-      blocked: newestFirst(tasks.filter(task => task.status === 'blocked')).slice(0, 2).map(contextItem),
-      recentHandoffs: handoffs,
-      ...(boundTaskId ? { boundTask: this.get(boundTaskId) } : {}),
-    }
+      ...(boundTaskId ? { boundTaskId, boundTask: this.get(boundTaskId) } : {}),
+      tasks: this.store.allTasks(),
+      checkpoints: this.store.allCheckpoints(),
+      now: this.now(),
+      config: this.config.recallGate,
+    })
+    if (this.config.recallGate.enabled) this.persistRecallAudit(evaluation.audit)
+    return evaluation
+  }
+
+  context(workspaceId: string, boundTaskId?: string): TaskContextPackage {
+    const evaluation = this.evaluateContext(workspaceId, boundTaskId)
+    return this.config.recallGate.enabled && this.config.recallGate.mode === 'actual'
+      ? evaluation.gatedPackage
+      : evaluation.legacyPackage
+  }
+
+  private persistRecallAudit(summary: RecallEvaluation['audit']): void {
+    void (async () => {
+      await this.store.upsertRecallAudit({
+        ...summary,
+        id: randomUUID(),
+        createdAt: this.now(),
+      })
+      await this.store.pruneRecallAudit(
+        summary.workspaceId,
+        this.now(),
+        this.config.recallGate.auditLimit,
+        this.config.recallGate.auditRetentionDays,
+      )
+    })().catch(error => {
+      console.warn('project-task: recall audit write failed', error)
+    })
   }
 
   activeTaskForSession(sessionId: string): ProjectTask | undefined {
@@ -240,10 +326,71 @@ export class ProjectTaskService {
   }
 
   boundTaskForSession(sessionId: string): ProjectTask | undefined {
+    // Prefer the task this session is actively executing. A session can accumulate
+    // links to several root tasks (handoffs, checkpoints on other tasks); the newest
+    // link is not necessarily the task being worked, which made the task tab and the
+    // session title disagree with the actual work.
+    const active = this.activeTaskForSession(sessionId)
+    if (active) return active
     const link = newestFirst(this.store.allLinks().filter(item => item.sessionId === sessionId && !item.taskId.includes(':')))[0]
     if (!link) return undefined
     const task = this.store.tasks.get(link.taskId)
     return task && !task.parentId ? task : undefined
+  }
+
+  /**
+   * A task bound to this session can be taken over when it is waiting for review
+   * (in_review) or when it is in_progress but no session owns it any more (for
+   * example the board moved it back to in_progress without an executing session).
+   * A task owned by another session, or in done/paused/blocked, must not be stolen.
+   */
+  private isTakeoverCandidate(task: ProjectTask, sessionId: string): boolean {
+    if (task.parentId) return false
+    if (task.activeSessionId && task.activeSessionId !== sessionId) return false
+    if (task.status === 'in_review') return true
+    return task.status === 'in_progress' && !task.activeSessionId
+  }
+
+  /**
+   * Re-entering a session whose bound task is in_review is treated as "rollback to
+   * modify": the task returns to in_progress and is re-bound to this session so the
+   * start guard no longer blocks side-effect tools. Idempotent and safe for
+   * concurrent callers; returns the (possibly unchanged) task when it can be used.
+   */
+  async reviveForSession(sessionId: string): Promise<ProjectTask | undefined> {
+    const bound = this.boundTaskForSession(sessionId)
+    if (!bound) return undefined
+    if (bound.status === 'in_progress' && bound.activeSessionId === sessionId) return bound
+    if (!this.isTakeoverCandidate(bound, sessionId)) return undefined
+
+    let revived = false
+    let fromStatus: TaskStatus = bound.status
+    const updated = await this.store.tasks.update(bound.id, current => {
+      if (!this.isTakeoverCandidate(current, sessionId)) return current
+      fromStatus = current.status
+      revived = true
+      const next: ProjectTask = {
+        ...current,
+        status: 'in_progress',
+        activeSessionId: sessionId,
+        revision: current.revision + 1,
+        updatedAt: this.now(),
+        handoffIncomplete: false,
+      }
+      delete next.completedAt
+      delete next.blockedReason
+      delete next.unblockCondition
+      return next
+    })
+    if (!revived) return undefined
+    await this.activity(updated, { type: 'agent', sessionId }, 'resumed', {
+      fromStatus,
+      toStatus: 'in_progress',
+      detail: fromStatus === 'in_review'
+        ? '待验收会话重新进入工作，自动回退为进行中（回退修改）。'
+        : '会话重新接管未绑定执行会话的任务。',
+    })
+    return updated
   }
 
   async interruptSession(sessionId: string, summary: string, eventRange?: { fromSeq: number; toSeq: number }): Promise<void> {
@@ -305,6 +452,27 @@ export class ProjectTaskService {
     return this.get(current.id)
   }
 
+  /**
+   * Hand off a task that is still owned by this session but is being replaced by a new
+   * main task in the same session (topic switch). Pauses it with a handoff checkpoint
+   * and clears activeSessionId so the session keeps exactly one active main task.
+   */
+  private async supersedeActiveTask(
+    task: ProjectTask,
+    sessionId: string,
+    newTitle: string,
+    actor: TaskActor,
+  ): Promise<void> {
+    await this.writeCheckpoint(task, {
+      taskId: task.id,
+      sessionId,
+      kind: 'handoff',
+      actor,
+      summary: `在本会话中切换到新的主任务「${newTitle}」，原任务已暂停并保留交接上下文。`,
+      status: 'paused',
+    }, true)
+  }
+
   private async createSubtask(parent: ProjectTask, input: SubtaskInput, actor: TaskActor): Promise<void> {
     const task = this.newTask({
       workspaceId: parent.workspaceId,
@@ -355,8 +523,14 @@ export class ProjectTaskService {
     }
   }
 
-  private async writeCheckpoint(task: ProjectTask, input: CheckpointInput, mutateTask: boolean): Promise<void> {
+  private async writeCheckpoint(
+    task: ProjectTask,
+    input: CheckpointInput,
+    mutateTask: boolean,
+    observedArtifacts: readonly ObservedArtifact[] = [],
+  ): Promise<void> {
     const timestamp = this.now()
+    const eligibleArtifacts = this.eligibleArtifacts(task, input.sessionId, observedArtifacts)
     const checkpoint: TaskCheckpoint = {
       id: randomUUID(),
       taskId: task.id,
@@ -364,11 +538,13 @@ export class ProjectTaskService {
       kind: input.kind,
       summary: input.summary,
       decisions: input.decisions ?? [],
-      modifiedFiles: input.modifiedFiles ?? [],
+      modifiedFiles: [...new Set([...(input.modifiedFiles ?? []), ...eligibleArtifacts.map(item => item.path)])],
       verification: input.verification ?? [],
       openQuestions: input.openQuestions ?? [],
       nextSteps: input.nextSteps ?? [],
       createdAt: timestamp,
+      ...(input.lessons?.length ? { lessons: [...input.lessons] } : {}),
+      ...(input.procedures?.length ? { procedures: [...input.procedures] } : {}),
       ...(input.currentState === undefined ? {} : { currentState: input.currentState }),
       ...(input.eventRange ? { eventRange: input.eventRange } : {}),
     }
@@ -378,6 +554,7 @@ export class ProjectTaskService {
     }
     if (!mutateTask) {
       await writeRecord()
+      await this.persistArtifacts(task, eligibleArtifacts)
       return
     }
 
@@ -418,11 +595,39 @@ export class ProjectTaskService {
       return next
     })
     await writeRecord()
+    await this.persistArtifacts(task, eligibleArtifacts)
     await this.activity(updated, input.actor, 'checkpoint', {
       fromStatus,
       toStatus: updated.status,
       detail: `${input.kind}: ${input.summary}`,
     })
+  }
+
+  private eligibleArtifacts(
+    task: ProjectTask,
+    sessionId: string,
+    observedArtifacts: readonly ObservedArtifact[],
+  ): ObservedArtifact[] {
+    if (!observedArtifacts.length) return []
+    const link = this.store.links.get(linkKey(task.id, sessionId))
+    if (!link) return []
+    const seen = new Set<string>()
+    return observedArtifacts.filter(item => {
+      if (seen.has(item.observationId) || item.observedAt <= link.linkedAt) return false
+      const segments = item.path.split('/')
+      if (!item.path || item.path.startsWith('/') || segments.some(segment => !segment || segment === '.' || segment === '..')) return false
+      seen.add(item.observationId)
+      return true
+    })
+  }
+
+  private async persistArtifacts(task: ProjectTask, artifacts: readonly ObservedArtifact[]): Promise<void> {
+    if (!artifacts.length) return
+    try {
+      await this.store.upsertArtifacts(task.id, task.workspaceId, artifacts)
+    } catch (error) {
+      console.warn('project-task: artifact ledger write failed', error)
+    }
   }
 
   private async link(

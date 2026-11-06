@@ -27,7 +27,7 @@ export const PRIMARY_COLUMNS: readonly TaskStatus[] = ['todo', 'in_progress', 'i
 /** Mirrors the Host transition table so the board only offers reachable states. */
 export const STATUS_TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
   backlog: ['todo', 'cancelled'],
-  todo: ['backlog', 'in_progress', 'cancelled'],
+  todo: ['backlog', 'in_progress', 'in_review', 'cancelled'],
   in_progress: ['paused', 'blocked', 'in_review', 'cancelled'],
   paused: ['todo', 'in_progress', 'blocked', 'cancelled'],
   blocked: ['todo', 'in_progress', 'cancelled'],

@@ -74,6 +74,7 @@ export function apply(ctx: ClientContext): void {
   const actions: ProjectTaskActions = {
     list: query => unwrap(namespace().list(query)),
     get: taskId => unwrap(namespace().get(taskId)),
+    recallAudit: (taskId, limit) => unwrap(namespace().recallAudit(taskId, limit)),
     create: input => unwrap(namespace().create(input)),
     update: input => unwrap(namespace().update(input)),
     continueTask: input => unwrap(namespace().continue(input)),

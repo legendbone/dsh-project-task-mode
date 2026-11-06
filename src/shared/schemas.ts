@@ -27,6 +27,8 @@ export const projectTaskSchema = z.object({
   createdAt: z.number(),
   updatedAt: z.number(),
   completedAt: z.number().optional(),
+  archivedAt: z.number().optional(),
+  deletedAt: z.number().optional(),
 }).readonly()
 
 export const taskSessionLinkSchema = z.object({
@@ -50,6 +52,8 @@ export const taskCheckpointSchema = z.object({
   verification: z.array(z.string()),
   openQuestions: z.array(z.string()),
   nextSteps: z.array(z.string()),
+  lessons: z.array(z.string()).optional(),
+  procedures: z.array(z.string()).optional(),
   eventRange: z.object({
     fromSeq: z.number().int().nonnegative(),
     toSeq: z.number().int().nonnegative(),
@@ -67,6 +71,65 @@ export const taskActivitySchema = z.object({
   toStatus: taskStatusSchema.optional(),
   detail: z.string().optional(),
   createdAt: z.number(),
+}).readonly()
+
+export const observedArtifactSchema = z.object({
+  observationId: z.string().min(1).max(500),
+  path: z.string().min(1).max(2000),
+  changeKind: z.enum(['created', 'modified', 'deleted', 'renamed']),
+  toolName: z.string().min(1).max(100),
+  observedAt: z.number().nonnegative(),
+})
+
+export const taskArtifactSchema = observedArtifactSchema.extend({
+  taskId: z.string().min(1),
+  workspaceId: z.string().min(1),
+  source: z.literal('tool-observer'),
+  firstObservedAt: z.number().nonnegative(),
+  lastObservedAt: z.number().nonnegative(),
+}).readonly()
+
+export const recallRejectionSchema = z.object({
+  taskId: z.string().min(1),
+  reason: z.enum(['below-score', 'insufficient-signals', 'below-support-ratio', 'no-context-slot', 'safety-cap', 'budget-truncated']),
+  score: z.number().finite(),
+})
+
+export const recallAuditSummarySchema = z.object({
+  workspaceId: z.string().min(1),
+  boundTaskId: z.string().optional(),
+  mode: z.enum(['shadow', 'actual']),
+  gateVersion: z.string().min(1),
+  candidateCount: z.number().int().nonnegative(),
+  keptCount: z.number().int().nonnegative(),
+  reasonCounts: z.record(z.string(), z.number().int().nonnegative()),
+  legacyChars: z.number().int().nonnegative(),
+  gatedChars: z.number().int().nonnegative(),
+  nonBoundBudget: z.number().int().nonnegative(),
+  rejectedSample: z.array(recallRejectionSchema).max(20),
+})
+
+export const recallAuditSchema = recallAuditSummarySchema.extend({
+  id: z.string().min(1),
+  sessionId: z.string().optional(),
+  createdAt: z.number().nonnegative(),
+}).readonly()
+
+export const taskInsightSchema = z.object({
+  id: z.string().min(1),
+  workspaceId: z.string().min(1),
+  taskId: z.string().optional(),
+  kind: z.enum(['decision', 'lesson', 'procedure', 'question']),
+  scope: z.enum(['task', 'workspace', 'global']),
+  content: z.string(),
+  contentHash: z.string(),
+  status: z.enum(['active', 'resolved', 'stale', 'superseded']).default('active'),
+  supersededByInsightId: z.string().optional(),
+  sourceCheckpointId: z.string().optional(),
+  createdAt: z.number().nonnegative(),
+  updatedAt: z.number().nonnegative(),
+  lastSeenAt: z.number().nonnegative(),
+  lastUsedAt: z.number().nonnegative().optional(),
 }).readonly()
 
 export const subtaskInputSchema = z.object({
@@ -119,6 +182,8 @@ export const checkpointInputSchema = z.object({
   verification: z.array(z.string()).max(200).optional(),
   openQuestions: z.array(z.string()).max(100).optional(),
   nextSteps: z.array(z.string()).max(100).optional(),
+  lessons: z.array(z.string()).max(100).optional(),
+  procedures: z.array(z.string()).max(100).optional(),
   eventRange: z.object({
     fromSeq: z.number().int().nonnegative(),
     toSeq: z.number().int().nonnegative(),

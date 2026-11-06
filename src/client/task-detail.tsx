@@ -30,6 +30,15 @@ import {
 import { sessionLabel, type SessionInfoMap } from './session-info.ts'
 
 const PRIORITIES: readonly TaskPriority[] = ['low', 'normal', 'high']
+const ARTIFACT_KIND_LABELS = { created: '新增', modified: '修改', deleted: '删除', renamed: '重命名' } as const
+const REJECTION_LABELS: Record<string, string> = {
+  'below-score': '低于分数阈值',
+  'insufficient-signals': '支持信号不足',
+  'below-support-ratio': '支持率不足',
+  'no-context-slot': '没有上下文槽位',
+  'safety-cap': '超过桶上限',
+  'budget-truncated': '超出字符预算',
+}
 
 interface TaskDetailProps {
   details: TaskDetails
@@ -172,6 +181,9 @@ export function TaskDetail({
   const recentSession = details.sessions[0]
   const checkpointCount = details.checkpoints.length
   const visibleCheckpoints = showAllCheckpoints ? details.checkpoints : details.checkpoints.slice(0, 3)
+  const artifacts = details.artifacts ?? []
+  const visibleArtifacts = artifacts.slice(0, 20)
+  const recallAudits = (details.recallAudit ?? []).slice(0, 5)
   const childDone = details.children.filter(item => item.status === 'done').length
   const hint = inReview
     ? '通过验收后任务进入已完成；退回修改会重新标记为进行中。'
@@ -376,6 +388,46 @@ export function TaskDetail({
           </>}
       </Section>
 
+      <Section title="文件台账" count={String(artifacts.length)}>
+        {details.artifactObservationTruncated && <p className="ptm-form-error" role="status">本会话文件观察已达到上限，台账不完整。</p>}
+        {artifacts.length === 0
+          ? <p className="ptm-muted">暂无自动沉淀的文件记录。</p>
+          : <>
+            <ul className="ptm-activity-list">
+              {visibleArtifacts.map(artifact => <li key={`${artifact.taskId}:${artifact.path}`}>
+                <span className="ptm-activity-dot" />
+                <div className="ptm-activity-main">
+                  <span className="ptm-activity-action">{ARTIFACT_KIND_LABELS[artifact.changeKind]} · {artifact.toolName}</span>
+                  <p className="ptm-activity-detail"><code>{artifact.path}</code></p>
+                </div>
+                <time title={fullTime(artifact.lastObservedAt)}>{relativeTime(artifact.lastObservedAt, now)}</time>
+              </li>)}
+            </ul>
+            {artifacts.length > visibleArtifacts.length && <p className="ptm-muted">仅展示最近 {visibleArtifacts.length} 条。</p>}
+          </>}
+      </Section>
+
+      <Section title="召回解释" count={String(recallAudits.length)}>
+        {recallAudits.length === 0
+          ? <p className="ptm-muted">尚无召回审计记录。</p>
+          : recallAudits.map(audit => <details className="ptm-evidence" key={audit.id}>
+            <summary>
+              {audit.mode === 'shadow' ? 'Shadow 对比' : '实际门控'} · {audit.keptCount}/{audit.candidateCount} 项
+              <span className="ptm-count-badge">{audit.gateVersion}</span>
+            </summary>
+            <div className="ptm-evidence-group">
+              <strong>{fullTime(audit.createdAt)}</strong>
+              <p>旧召回 {audit.legacyChars} 字符；门控召回 {audit.gatedChars} 字符；非绑定预算 {audit.nonBoundBudget}。</p>
+              {Object.entries(audit.reasonCounts).map(([reason, count]) => <p key={reason}>{REJECTION_LABELS[reason] ?? reason}：{count}</p>)}
+              {audit.rejectedSample.length > 0 && <ul>
+                {audit.rejectedSample.map(item => <li key={`${audit.id}:${item.taskId}`}>
+                  <code>{item.taskId}</code> · {REJECTION_LABELS[item.reason] ?? item.reason} · {item.score.toFixed(3)}
+                </li>)}
+              </ul>}
+            </div>
+          </details>)}
+      </Section>
+
       <Section title="关联会话" count={String(details.sessions.length)}>
         {details.sessions.length === 0
           ? <p className="ptm-muted">还没有关联会话，开启任务后会出现在这里。</p>
@@ -484,6 +536,8 @@ function CheckpointCard({ checkpoint, now, sessionInfo, onOpenSession, disabled 
 function Evidence({ checkpoint }: { checkpoint: TaskCheckpoint }) {
   const groups = [
     { title: '关键决策', items: checkpoint.decisions, code: false },
+    { title: '经验教训', items: checkpoint.lessons ?? [], code: false },
+    { title: '步骤沉淀', items: checkpoint.procedures ?? [], code: false },
     { title: '修改文件', items: checkpoint.modifiedFiles, code: true },
     { title: '验证证据', items: checkpoint.verification, code: false },
     { title: '开放问题', items: checkpoint.openQuestions, code: false },

@@ -2,7 +2,9 @@ import { z } from 'zod'
 import type { InvocationDescriptor } from '@deepseek-ai/dsh-typert-protocol'
 import {
   projectTaskSchema,
+  recallAuditSchema,
   taskActivitySchema,
+  taskArtifactSchema,
   taskCheckpointSchema,
   taskPrioritySchema,
   taskQuerySchema,
@@ -30,6 +32,9 @@ const taskDetailsSchema = z.object({
   checkpoints: z.array(taskCheckpointSchema),
   sessions: z.array(taskSessionLinkSchema),
   activities: z.array(taskActivitySchema),
+  artifacts: z.array(taskArtifactSchema).optional(),
+  recallAudit: z.array(recallAuditSchema).optional(),
+  artifactObservationTruncated: z.boolean().optional(),
 })
 
 const contextItemSchema = z.object({
@@ -105,6 +110,10 @@ export const PROJECT_TASK_INVOCATIONS: readonly InvocationDescriptor[] = [
     parameter('workspaceId', z.string().min(1)),
     parameter('boundTaskId', z.string().min(1).optional()),
   ], result('TaskContextPackage', contextSchema)),
+  direct('recallAudit', [
+    parameter('taskId', z.string().min(1)),
+    parameter('limit', z.number().int().positive().max(200).optional()),
+  ], result('RecallAuditRecord[]', z.array(recallAuditSchema))),
   direct('create', [parameter('input', createSchema)], result('TaskDetails', taskDetailsSchema)),
   direct('update', [parameter('input', updateRequestSchema)], result('TaskDetails', taskDetailsSchema)),
   direct('continue', [parameter('input', continueSchema)], result('ContinueTaskResult', continueResultSchema)),

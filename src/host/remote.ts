@@ -9,6 +9,9 @@ import type {
   ContinueTaskInput,
   ContinueTaskResult,
   CreateManualTaskInput,
+  ObservedArtifact,
+  RecallAuditRecord,
+  RecallEvaluation,
   StartTaskInput,
   SubtaskInput,
   TaskContextPackage,
@@ -18,6 +21,7 @@ import type {
   UpdateTaskRequest,
 } from '../shared/types.ts'
 import type { ProjectTaskService } from './service.ts'
+import { shouldRetitleSessionAfterStart } from './service.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -43,6 +47,11 @@ export class ProjectTaskController extends TypertRemoteService {
   @Remote('context')
   context(workspaceId: string, boundTaskId?: string): Promise<TaskContextPackage> {
     return Promise.resolve(this.tasks.context(workspaceId, boundTaskId))
+  }
+
+  @Remote('recallAudit')
+  recallAudit(taskId: string, limit?: number): Promise<RecallAuditRecord[]> {
+    return Promise.resolve(this.tasks.listRecallAudit(taskId, limit))
   }
 
   @Remote('create')
@@ -100,11 +109,21 @@ export class ProjectTaskController extends TypertRemoteService {
     session: Session,
     input: Omit<StartTaskInput, 'workspaceId' | 'sessionId'>,
   ): Promise<TaskDetails> {
-    return await this.tasks.start({
+    const previous = this.tasks.boundTaskForSession(session.id)
+    const details = await this.tasks.start({
       ...input,
       workspaceId: await this.workspaceIdForSession(session),
       sessionId: session.id,
     })
+    // 会话中途切换到新的主任务时，把会话标题同步成新任务标题，避免标题停留在旧任务。
+    if (shouldRetitleSessionAfterStart(previous?.id, details, session.id)) {
+      try {
+        await this.ctx.sessionController.rename({ sessionId: session.id, title: details.task.title })
+      } catch (error) {
+        this.ctx.logger.warn(`project-task session retitle failed: ${errorMessage(error)}`)
+      }
+    }
+    return details
   }
 
   async updateForSession(session: Session, input: UpdateTaskRequest): Promise<TaskDetails> {
@@ -127,13 +146,14 @@ export class ProjectTaskController extends TypertRemoteService {
   async checkpointForSession(
     session: Session,
     input: Omit<CheckpointInput, 'sessionId' | 'actor'>,
+    observedArtifacts: readonly ObservedArtifact[] = [],
   ): Promise<TaskDetails> {
     await this.assertTaskWorkspace(session, input.taskId)
     return await this.tasks.checkpoint({
       ...input,
       sessionId: session.id,
       actor: { type: 'agent', sessionId: session.id },
-    })
+    }, observedArtifacts)
   }
 
   async listForSession(session: Session, query: Omit<TaskQuery, 'workspaceId'>): Promise<TaskListResult> {
@@ -151,8 +171,18 @@ export class ProjectTaskController extends TypertRemoteService {
     return this.tasks.context(workspaceId, boundTask?.id)
   }
 
+  async contextEvaluationForSession(session: Session): Promise<RecallEvaluation> {
+    const workspaceId = await this.workspaceIdForSession(session)
+    const boundTask = this.tasks.boundTaskForSession(session.id)
+    return this.tasks.evaluateContext(workspaceId, boundTask?.id)
+  }
+
   activeTaskForSession(sessionId: string) {
     return this.tasks.activeTaskForSession(sessionId)
+  }
+
+  reviveForSession(sessionId: string) {
+    return this.tasks.reviveForSession(sessionId)
   }
 
   async interruptSession(

@@ -15,6 +15,7 @@ export const TYPERT_MANIFEST: TypertContribution = {
         { kind: 'method', name: 'list', signature: 'list(query: TaskQuery): Promise<TaskListResult>' },
         { kind: 'method', name: 'get', signature: 'get(taskId: string): Promise<TaskDetails>' },
         { kind: 'method', name: 'context', signature: 'context(workspaceId: string, boundTaskId?: string): Promise<TaskContextPackage>' },
+        { kind: 'method', name: 'recallAudit', signature: 'recallAudit(taskId: string, limit?: number): Promise<RecallAuditRecord[]>' },
         { kind: 'method', name: 'create', signature: 'create(input: CreateManualTaskInput): Promise<TaskDetails>' },
         { kind: 'method', name: 'update', signature: 'update(input: UpdateTaskRequest): Promise<TaskDetails>' },
         { kind: 'method', name: 'continue', signature: 'continue(input: ContinueTaskInput): Promise<ContinueTaskResult>' },
