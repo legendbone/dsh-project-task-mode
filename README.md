@@ -2,7 +2,7 @@
 
 为 DeepSeek Harness（DSH）实现「项目任务模式」：以工作区为项目边界，将对话拆解为可持续推进的任务，在同工作区的会话间共享任务状态和交接上下文，并提供工作区任务看板。
 
-当前版本：`0.1.20`。目标宿主：DeepSeek Harness `0.2.2-rc.1`（兼容范围 `>=0.2.1-rc.3 <0.3.0`）。
+当前版本：`0.1.21`。目标宿主：DeepSeek Harness `0.2.2-rc.1`（兼容范围 `>=0.2.1-rc.3 <0.3.0`）。
 
 ## 已实现
 
@@ -30,7 +30,7 @@
 
 ```bash
 npm pack
-npx @deepseek-ai/dsh@0.2.2-rc.1 plugin --profile web add ./dsh-project-task-mode-0.1.20.tgz
+npx @deepseek-ai/dsh@0.2.2-rc.1 plugin --profile web add ./dsh-project-task-mode-0.1.21.tgz
 ```
 
 ### DeepSeek Harness Desktop
@@ -44,6 +44,8 @@ npx @deepseek-ai/dsh@0.2.2-rc.1 plugin --profile web add ./dsh-project-task-mode
 `package.json` 的 `engines.dsh` 与 19 个 `@deepseek-ai/dsh-*` peerDependencies 统一声明为范围 `>=0.2.1-rc.3 <0.3.0`。启动器用 `semver.satisfies(runtimeVersion, engines.dsh, { includePrerelease: true })` 判定 bundle 兼容性，精确版本串只匹配宿主自身版本，DSH 一升级就会整层跳过 `cordis.patch.yml`（Host Service、Preset、看板全部消失）。改成范围后，跨 rc / patch 升级无需重新发版。`devDependencies` 保留精确版本，因为它们只服务本地构建、宿主不读取；放宽会让 npm 解析到 `0.2.1-rc.5`，其 `@deepseek-ai/cordis` peer 为 `~4.0.5`，与根 `^4.1.0` 冲突并导致 `npm ci` ERESOLVE。回归断言见 `tests/host-compat.test.mjs`。
 
 `0.1.12` 和 `0.1.19` 曾把 `engines.dsh` 钉死为当时的宿主版本，导致每次 DSH 升级都要重发版；`0.1.20` 起不再需要。
+
+`0.1.21` 修复宿主 `0.2.2-rc.1` 起 `@deepseek-ai/dsh-tool-subagent-control` 合并 `list_agents` 后不再导出 `./list-agents` 子路径的问题：旧 preset 仍引用该子路径会让整条「项目任务」Agent Preset 挂载失败、在模式下拉里消失。现在 preset 只挂载主包，并同步新的 `modelSelection` / `modelDiscovery` 配置。
 
 ## 首次使用
 

@@ -62,3 +62,13 @@ test('package-lock.json 根段与 package.json 的版本和范围一致', () => 
     assert.equal(root.devDependencies[name], range, `lock 根包 devDependency ${name} 必须同步`)
   }
 })
+
+test('cordis.patch 不再引用已合并的 tool-subagent-control 子路径', () => {
+  const patch = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+  assert.equal(
+    patch.includes('@deepseek-ai/dsh-tool-subagent-control/list-agents'),
+    false,
+    'dsh 0.2.2-rc.1 起 list_agents 已并入主包，旧 ./list-agents 子路径会让整条 preset 挂载失败',
+  )
+  assert.match(patch, /name: '@deepseek-ai\/dsh-tool-subagent-control'\n/)
+})

@@ -2,7 +2,7 @@
 
 - 对比对象：
   - `@yolk_vat-y/dsh-project-memory`（作者 00080000，版本 0.6.9，仓库 github.com/00080000/dsh-project-memory）
-  - `dsh-project-task-mode`（本地仓库，版本 0.1.20，目标 DSH 0.2.2-rc.1，兼容 `>=0.2.1-rc.3 <0.3.0`）
+  - `dsh-project-task-mode`（本地仓库，版本 0.1.21，目标 DSH 0.2.2-rc.1，兼容 `>=0.2.1-rc.3 <0.3.0`）
 - 日期：2026-11-04
 
 ## 0. 一句话定位

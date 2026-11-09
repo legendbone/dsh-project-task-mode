@@ -1,6 +1,6 @@
 {
   "name": "dsh-project-task-mode",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "description": "Workspace-scoped project tasks, handoffs, and a task board for DeepSeek Harness",
   "type": "module",
   "main": "lib/index.js",

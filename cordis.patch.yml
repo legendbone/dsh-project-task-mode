@@ -90,16 +90,17 @@
             isolate:
               workflowEngine: true
             config:
+              # 0.2.2-rc.1 起 list_agents 已并入主包，不再导出 ./list-agents 子路径；
+              # 保留旧子路径会让整条 preset 挂载失败（row 从未启动）。
               - id: tool-subagent-control
                 name: '@deepseek-ai/dsh-tool-subagent-control'
-              - id: tool-subagent-list-agents
-                name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
               - id: tool-subagent
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
                   provider: spawn
                   toolName: subagent
-                  modelSelectionSettings: true
+                  modelSelection: true
+                  modelDiscovery: true
               - id: tool-subagent-fork
                 name: '@deepseek-ai/dsh-tool-subagent'
                 config:
